@@ -3,19 +3,23 @@ import 'package:get/get.dart';
 import '../controllers/auth_controller.dart';
 import '../routes/app_routes.dart';
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+class SignupPage extends StatefulWidget {
+  const SignupPage({super.key});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<SignupPage> createState() => _SignupPageState();
 }
 
-class _LoginPageState extends State<LoginPage>
+class _SignupPageState extends State<SignupPage>
     with SingleTickerProviderStateMixin {
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
-  bool _rememberMe = false;
+  bool _obscureConfirmPassword = true;
+  bool _isUser = true;
+  bool _isAdmin = false;
 
   final AuthController _authController = Get.put(AuthController());
   AnimationController? _animationController;
@@ -42,8 +46,10 @@ class _LoginPageState extends State<LoginPage>
   @override
   void dispose() {
     _animationController?.dispose();
+    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -53,8 +59,26 @@ class _LoginPageState extends State<LoginPage>
     });
   }
 
-  void _handleLogin() {
-    if (_emailController.text.trim().isEmpty || _passwordController.text.isEmpty) {
+  void _toggleConfirmPasswordVisibility() {
+    setState(() {
+      _obscureConfirmPassword = !_obscureConfirmPassword;
+    });
+  }
+
+  void _handleSignup() {
+    if (_nameController.text.trim().isEmpty) {
+      Get.snackbar(
+        'Error',
+        'Please enter your name',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFFF8383),
+        colorText: Colors.white,
+      );
+      return;
+    }
+
+    if (_emailController.text.trim().isEmpty ||
+        _passwordController.text.isEmpty) {
       Get.snackbar(
         'Error',
         'Please fill in all fields',
@@ -65,18 +89,80 @@ class _LoginPageState extends State<LoginPage>
       return;
     }
 
+    if (_passwordController.text.length < 6) {
+      Get.snackbar(
+        'Error',
+        'Password must be at least 6 characters',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFFF8383),
+        colorText: Colors.white,
+      );
+      return;
+    }
+
+    if (_passwordController.text != _confirmPasswordController.text) {
+      Get.snackbar(
+        'Error',
+        'Passwords do not match',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFFF8383),
+        colorText: Colors.white,
+      );
+      return;
+    }
+
+    if (!_isUser && !_isAdmin) {
+      Get.snackbar(
+        'Error',
+        'Please select at least one account type',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFFF8383),
+        colorText: Colors.white,
+      );
+      return;
+    }
+
+    // Build roles list
+    List<String> roles = [];
+    if (_isUser) roles.add('user');
+    if (_isAdmin) roles.add('admin');
+
     _authController.clearError();
     _authController
-        .signInWithEmailAndPassword(
+        .signUpWithEmailAndPassword(
       _emailController.text.trim(),
       _passwordController.text,
+      displayName: _nameController.text.trim(),
+      roles: roles,
     )
-        .then((success) {
+        .then((success) async {
       if (success) {
-        // Clear form fields
+        // Reset form fields
+        _nameController.clear();
         _emailController.clear();
         _passwordController.clear();
-        _authController.navigateBasedOnRole();
+        _confirmPasswordController.clear();
+        setState(() {
+          _isUser = true;
+          _isAdmin = false;
+        });
+
+        // Sign out the user (they were auto-signed in after signup)
+        await _authController.signOut();
+
+        // Wait a moment for sign out to complete
+        await Future.delayed(const Duration(milliseconds: 300));
+
+        Get.snackbar(
+          'Success',
+          'Account created successfully! Please login.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+
+        // Navigate to login page
+        Get.offAllNamed(AppRoutes.login);
       } else {
         Get.snackbar(
           'Error',
@@ -87,77 +173,6 @@ class _LoginPageState extends State<LoginPage>
         );
       }
     });
-  }
-
-  void _handleGoogleSignIn() {
-    _authController.clearError();
-    _authController.signInWithGoogle().then((success) {
-      if (success) {
-        _authController.navigateBasedOnRole();
-      } else {
-        Get.snackbar(
-          'Error',
-          _authController.errorMessage.value,
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-      }
-    });
-  }
-
-  void _showUnderDevelopmentDialog(String featureName) {
-    Get.dialog(
-      AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF8383).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.construction,
-                color: Color(0xFFFF8383),
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'Under Development',
-              style: TextStyle(
-                color: Color(0xFF404040),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          'The $featureName screen is currently under development. Please check back later.',
-          style: const TextStyle(
-            color: Color(0xFF404040),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Get.back();
-            },
-            child: const Text(
-              'OK',
-              style: TextStyle(
-                color: Color(0xFFFF8383),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -179,7 +194,7 @@ class _LoginPageState extends State<LoginPage>
                 // Top section with cover image
                 if (!isTablet)
                   SizedBox(
-                    height: screenHeight * 0.35,
+                    height: screenHeight * 0.3,
                     child: Stack(
                       children: [
                         Positioned(
@@ -233,13 +248,13 @@ class _LoginPageState extends State<LoginPage>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // Sign in title
+                            // Sign up title
                             ShaderMask(
                               shaderCallback: (bounds) => const LinearGradient(
                                 colors: [Color(0xFFFF8383), Color(0xFFFF6B6B)],
                               ).createShader(bounds),
                               child: Text(
-                                'Sign in',
+                                'Sign up',
                                 style: TextStyle(
                                   fontSize: isTablet ? 42 : 36,
                                   fontWeight: FontWeight.bold,
@@ -262,6 +277,15 @@ class _LoginPageState extends State<LoginPage>
                               ),
                             ),
                             const SizedBox(height: 40),
+
+                            // Name field
+                            _buildInputField(
+                              controller: _nameController,
+                              icon: Icons.person_outline,
+                              hintText: 'Full Name',
+                              obscureText: false,
+                            ),
+                            const SizedBox(height: 20),
 
                             // Email field
                             _buildInputField(
@@ -292,95 +316,95 @@ class _LoginPageState extends State<LoginPage>
                             ),
                             const SizedBox(height: 20),
 
-                            // Remember me and Forgot password
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: Checkbox(
-                                        value: _rememberMe,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            _rememberMe = value ?? false;
-                                          });
-                                        },
-                                        activeColor: const Color(0xFFFF8383),
-                                        materialTapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      'Remember Me',
-                                      style: TextStyle(
-                                        color: Color(0xFF404040),
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ],
+                            // Confirm Password field
+                            _buildInputField(
+                              controller: _confirmPasswordController,
+                              icon: Icons.lock_outline,
+                              hintText: 'Confirm Password',
+                              obscureText: _obscureConfirmPassword,
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscureConfirmPassword
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  color: const Color(0xFF404040),
                                 ),
-                                GestureDetector(
-                                  onTap: () {
-                                    _showUnderDevelopmentDialog('Forgot Password');
-                                  },
-                                  child: const Text(
-                                    'Forgot Password?',
+                                onPressed: _toggleConfirmPasswordVisibility,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+
+                            // Role Selection
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.shade200),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Select Account Type',
                                     style: TextStyle(
-                                      color: Color(0xFFFF8383),
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF404040),
                                     ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 12),
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: CheckboxListTile(
+                                      title: const Text('User'),
+                                      subtitle: const Text('Access user dashboard and features'),
+                                      value: _isUser,
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _isUser = value ?? true;
+                                        });
+                                      },
+                                      controlAffinity: ListTileControlAffinity.leading,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: CheckboxListTile(
+                                      title: const Text('Admin'),
+                                      subtitle: const Text('Access admin dashboard and manage users'),
+                                      value: _isAdmin,
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _isAdmin = value ?? false;
+                                        });
+                                      },
+                                      controlAffinity: ListTileControlAffinity.leading,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 32),
 
-                            // Sign in button
+                            // Sign up button
                             _buildGradientButton(
-                              onPressed: _handleLogin,
-                              text: 'Sign in',
+                              onPressed: _handleSignup,
+                              text: 'Create Account',
                               isLoading: false,
                             ),
                             const SizedBox(height: 20),
 
-                            // Google Sign In button
-                            Obx(() => SizedBox(
-                              width: double.infinity,
-                              height: 55,
-                              child: OutlinedButton.icon(
-                                onPressed: _authController.isLoading.value
-                                    ? null
-                                    : _handleGoogleSignIn,
-                                icon: const Icon(Icons.g_mobiledata, size: 24, color: Color(0xFFFF8383)),
-                                label: const Text(
-                                  'Sign in with Google',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFFFF8383),
-                                  ),
-                                ),
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Color(0xFFFF8383)),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(30),
-                                  ),
-                                ),
-                              ),
-                            )),
-                            const SizedBox(height: 20),
-
-                            // Sign up text
+                            // Sign in text
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 const Text(
-                                  "Don't have an Account? ",
+                                  'Already have an Account? ',
                                   style: TextStyle(
                                     color: Color(0xFF404040),
                                     fontSize: 14,
@@ -388,10 +412,10 @@ class _LoginPageState extends State<LoginPage>
                                 ),
                                 GestureDetector(
                                   onTap: () {
-                                    Get.toNamed(AppRoutes.signup);
+                                    Get.toNamed(AppRoutes.login);
                                   },
                                   child: const Text(
-                                    'Sign up',
+                                    'Sign in',
                                     style: TextStyle(
                                       color: Color(0xFFFF8383),
                                       fontSize: 14,
