@@ -1,22 +1,62 @@
 import 'package:flutter/material.dart';
-import '../widgets/custom_widgets.dart';
+import 'package:get/get.dart';
+import '../controllers/auth_controller.dart';
+import '../controllers/location_controller.dart';
+import '../services/firestore_service.dart';
+import '../routes/app_routes.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:flutter_map/flutter_map.dart';
 
-class UserDashboard extends StatelessWidget {
+class UserDashboard extends StatefulWidget {
   const UserDashboard({super.key});
 
   @override
+  State<UserDashboard> createState() => _UserDashboardState();
+}
+
+class _UserDashboardState extends State<UserDashboard> {
+  bool _mapEnabled = false;
+
+  @override
   Widget build(BuildContext context) {
+    final AuthController authController = Get.find<AuthController>();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('User Dashboard'),
         backgroundColor: const Color(0xFFFF8383),
         foregroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              Navigator.pushReplacementNamed(context, '/login');
-            },
+          // Switch to admin dashboard if user has admin role
+          if (authController.currentUser?.isAdmin ?? false)
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.admin_panel_settings),
+                onPressed: () {
+                  Get.offAllNamed(AppRoutes.admin);
+                },
+                tooltip: 'Switch to Admin Dashboard',
+              ),
+            ),
+          Container(
+            margin: const EdgeInsets.only(right: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: () {
+                authController.signOut();
+              },
+            ),
           ),
         ],
       ),
@@ -26,9 +66,11 @@ class UserDashboard extends StatelessWidget {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFFFF8383).withOpacity(0.1),
+              const Color(0xFFFF8383).withOpacity(0.15),
+              const Color(0xFFFF8383).withOpacity(0.05),
               Colors.white,
             ],
+            stops: const [0.0, 0.3, 1.0],
           ),
         ),
         child: Center(
@@ -36,84 +78,93 @@ class UserDashboard extends StatelessWidget {
             padding: const EdgeInsets.all(24.0),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final isWideScreen = constraints.maxWidth > 600;
-                final cardWidth = isWideScreen 
-                    ? constraints.maxWidth * 0.8 
+                final isWideScreen = constraints.maxWidth > 400;
+                final cardWidth = isWideScreen
+                    ? constraints.maxWidth * 0.45
                     : constraints.maxWidth * 0.95;
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Welcome Card
-                    CustomCard(
+                    // Welcome Card with gradient
+                    Container(
                       width: cardWidth,
-                      backgroundColor: const Color(0xFFFF8383),
+                      padding: const EdgeInsets.all(32),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFF8383), Color(0xFFFF6B6B)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFFF8383).withOpacity(0.3),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
                       child: Column(
                         children: [
-                          const Icon(
-                            Icons.person,
-                            size: 64,
-                            color: Colors.white,
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Icon(
+                              Icons.person,
+                              size: 64,
+                              color: Colors.white,
+                            ),
                           ),
-                          const SizedBox(height: 16),
-                          Text(
+                          const SizedBox(height: 20),
+                          const Text(
                             'Welcome, User!',
-                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'Access your personal dashboard',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: Colors.white.withOpacity(0.7),
-                                ),
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.white.withOpacity(0.9),
+                            ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 24),
-                    
-                    // User Info Card
-                    CustomCard(
-                      width: cardWidth,
-                      child: Column(
+
+                    // Profile and Location in a row for wide screens
+                    if (isWideScreen)
+                      Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Profile Information',
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF404040),
-                                ),
+                          Expanded(
+                            child: _buildProfileCard(context, authController, cardWidth),
                           ),
-                          const SizedBox(height: 16),
-                          _buildInfoRow(
-                            context,
-                            icon: Icons.email,
-                            label: 'Email',
-                            value: 'user@example.com',
-                          ),
-                          const Divider(),
-                          _buildInfoRow(
-                            context,
-                            icon: Icons.phone,
-                            label: 'Phone',
-                            value: '+1 234 567 890',
-                          ),
-                          const Divider(),
-                          _buildInfoRow(
-                            context,
-                            icon: Icons.location_on,
-                            label: 'Location',
-                            value: 'New York, USA',
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildLocationCard(context, authController, cardWidth),
                           ),
                         ],
+                      )
+                    else
+                      Column(
+                        children: [
+                          _buildProfileCard(context, authController, cardWidth),
+                          const SizedBox(height: 16),
+                          _buildLocationCard(context, authController, cardWidth),
+                        ],
                       ),
-                    ),
                     const SizedBox(height: 24),
-                    
+
                     // Action Cards
                     if (isWideScreen)
                       Row(
@@ -125,7 +176,7 @@ class UserDashboard extends StatelessWidget {
                               title: 'Order History',
                               subtitle: 'View past orders',
                               onTap: () {
-                                _showUnderDevelopmentDialog(context, 'Order History');
+                                _showUnderDevelopmentDialog('Order History');
                               },
                             ),
                           ),
@@ -137,7 +188,7 @@ class UserDashboard extends StatelessWidget {
                               title: 'Wishlist',
                               subtitle: 'View saved items',
                               onTap: () {
-                                _showUnderDevelopmentDialog(context, 'Wishlist');
+                                _showUnderDevelopmentDialog('Wishlist');
                               },
                             ),
                           ),
@@ -149,7 +200,7 @@ class UserDashboard extends StatelessWidget {
                               title: 'Notifications',
                               subtitle: 'View alerts',
                               onTap: () {
-                                _showUnderDevelopmentDialog(context, 'Notifications');
+                                _showUnderDevelopmentDialog('Notifications');
                               },
                             ),
                           ),
@@ -164,7 +215,7 @@ class UserDashboard extends StatelessWidget {
                             title: 'Order History',
                             subtitle: 'View past orders',
                             onTap: () {
-                              _showUnderDevelopmentDialog(context, 'Order History');
+                              _showUnderDevelopmentDialog('Order History');
                             },
                           ),
                           const SizedBox(height: 16),
@@ -174,7 +225,7 @@ class UserDashboard extends StatelessWidget {
                             title: 'Wishlist',
                             subtitle: 'View saved items',
                             onTap: () {
-                              _showUnderDevelopmentDialog(context, 'Wishlist');
+                              _showUnderDevelopmentDialog('Wishlist');
                             },
                           ),
                           const SizedBox(height: 16),
@@ -184,23 +235,38 @@ class UserDashboard extends StatelessWidget {
                             title: 'Notifications',
                             subtitle: 'View alerts',
                             onTap: () {
-                              _showUnderDevelopmentDialog(context, 'Notifications');
+                              _showUnderDevelopmentDialog('Notifications');
                             },
                           ),
                         ],
                       ),
-                    
+
                     const SizedBox(height: 24),
-                    
+
                     // Recent Activity
-                    CustomCard(
+                    Container(
                       width: cardWidth,
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 20,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             'Recent Activity',
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(
                                   fontWeight: FontWeight.bold,
                                   color: const Color(0xFF404040),
                                 ),
@@ -288,17 +354,32 @@ class UserDashboard extends StatelessWidget {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: CustomCard(
-        margin: EdgeInsets.zero,
-        padding: const EdgeInsets.all(20),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 20,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
         child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFFFF8383).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFFFF8383).withOpacity(0.1),
+                    const Color(0xFFFF6B6B).withOpacity(0.1),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Icon(
                 icon,
@@ -306,20 +387,22 @@ class UserDashboard extends StatelessWidget {
                 color: const Color(0xFFFF8383),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Text(
               title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF404040),
-                  ),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF404040),
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               subtitle,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF404040).withOpacity(0.7),
-                  ),
+              style: TextStyle(
+                fontSize: 13,
+                color: const Color(0xFF404040).withOpacity(0.7),
+              ),
             ),
           ],
         ),
@@ -383,60 +466,358 @@ class UserDashboard extends StatelessWidget {
     );
   }
 
-  void _showUnderDevelopmentDialog(BuildContext context, String featureName) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFF8383).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.construction,
-                  color: Color(0xFFFF8383),
-                  size: 24,
-                ),
+  void _showUnderDevelopmentDialog(String featureName) {
+    Get.dialog(
+      AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF8383).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
               ),
-              const SizedBox(width: 12),
-              const Text(
-                'Under Development',
-                style: TextStyle(
-                  color: Color(0xFF404040),
-                  fontWeight: FontWeight.bold,
-                ),
+              child: const Icon(
+                Icons.construction,
+                color: Color(0xFFFF8383),
+                size: 24,
               ),
-            ],
-          ),
-          content: Text(
-            'The $featureName screen is currently under development. Please check back later.',
-            style: const TextStyle(
-              color: Color(0xFF404040),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text(
-                'OK',
-                style: TextStyle(
-                  color: Color(0xFFFF8383),
-                  fontWeight: FontWeight.w600,
-                ),
+            const SizedBox(width: 12),
+            const Text(
+              'Under Development',
+              style: TextStyle(
+                color: Color(0xFF404040),
+                fontWeight: FontWeight.bold,
               ),
             ),
           ],
-        );
-      },
+        ),
+        content: Text(
+          'The $featureName screen is currently under development. Please check back later.',
+          style: const TextStyle(
+            color: Color(0xFF404040),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Get.back();
+            },
+            child: const Text(
+              'OK',
+              style: TextStyle(
+                color: Color(0xFFFF8383),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocationMap(BuildContext context, AuthController authController) {
+    final locationController = Get.put(LocationController());
+    final user = authController.currentUser;
+    final MapController mapController = MapController();
+
+    if (user != null) {
+      locationController.loadUserLocation(user.uid);
+    }
+
+    return Obx(() {
+      final currentLocation = locationController.currentLocation.value;
+      final isLoading = locationController.isLoading.value;
+
+      // Auto-focus map when location changes
+      if (currentLocation != null && !isLoading && _mapEnabled) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          mapController.move(currentLocation, 15.0);
+        });
+      }
+
+      return Stack(
+        children: [
+          FlutterMap(
+            mapController: mapController,
+            options: MapOptions(
+              initialCenter: currentLocation ?? const LatLng(37.7749, -122.4194),
+              initialZoom: 15.0,
+              interactionOptions: _mapEnabled
+                  ? const InteractionOptions()
+                  : const InteractionOptions(flags: InteractiveFlag.none),
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.flutter_application_2',
+              ),
+              if (currentLocation != null)
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: currentLocation,
+                      width: 60,
+                      height: 60,
+                      child: const Icon(
+                        Icons.location_on,
+                        size: 40,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+          if (isLoading)
+            Container(
+              color: Colors.black26,
+              child: const Center(
+                child: CircularProgressIndicator(),
+              ),
+            ),
+          if (currentLocation == null && !isLoading)
+            const Center(
+              child: Text(
+                'No location data available',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+          if (!_mapEnabled)
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _mapEnabled = true;
+                });
+              },
+              child: Container(
+                color: Colors.white.withOpacity(0.7),
+                child: const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.touch_app,
+                        size: 48,
+                        color: Color(0xFFFF8383),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Tap to enable map',
+                        style: TextStyle(
+                          color: Color(0xFF404040),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    });
+  }
+
+  Widget _buildProfileCard(BuildContext context, AuthController authController, double cardWidth) {
+    return Container(
+      width: cardWidth,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Profile Information',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF404040),
+                    ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit, color: Color(0xFFFF8383)),
+                onPressed: () {
+                  _showEditProfileDialog(context, authController);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Obx(() => _buildInfoRow(
+            context,
+            icon: Icons.email,
+            label: 'Email',
+            value: authController.currentUser?.email ??
+                'Not available',
+          )),
+          const Divider(),
+          Obx(() => _buildInfoRow(
+            context,
+            icon: Icons.person,
+            label: 'Name',
+            value: authController.currentUser?.displayName ??
+                'Not set',
+          )),
+          const Divider(),
+          _buildInfoRow(
+            context,
+            icon: Icons.admin_panel_settings,
+            label: 'Roles',
+            value: authController.currentUser?.roles.join(', ') ?? 'user',
+          ),
+          const Divider(),
+          _buildInfoRow(
+            context,
+            icon: Icons.verified_user,
+            label: 'Status',
+            value: authController.currentUser?.status ?? 'active',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocationCard(BuildContext context, AuthController authController, double cardWidth) {
+    return Container(
+      width: cardWidth,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'My Location',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF404040),
+                    ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh, color: Color(0xFFFF8383)),
+                onPressed: () {
+                  final locationController = Get.find<LocationController>();
+                  final user = authController.currentUser;
+                  if (user != null) {
+                    locationController.fetchAndSaveLocation(user.uid);
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 200,
+            child: _buildLocationMap(context, authController),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditProfileDialog(BuildContext context, AuthController authController) {
+    final nameController = TextEditingController(
+      text: authController.currentUser?.displayName ?? '',
+    );
+
+    Get.dialog(
+      AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text(
+          'Edit Profile',
+          style: TextStyle(
+            color: Color(0xFF404040),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(
+            labelText: 'Display Name',
+            hintText: 'Enter your name',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Get.back();
+            },
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                color: Color(0xFF404040),
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (nameController.text.trim().isNotEmpty) {
+                // Update in Firestore
+                final firestoreService = FirestoreService();
+                await firestoreService.updateUserProfile(
+                  authController.currentUser!.uid,
+                  {'displayName': nameController.text.trim()},
+                );
+                // Reload user data
+                await authController.refreshUserData();
+                Get.back();
+                Get.snackbar(
+                  'Success',
+                  'Profile updated successfully',
+                  snackPosition: SnackPosition.BOTTOM,
+                  backgroundColor: Colors.green,
+                  colorText: Colors.white,
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF8383),
+            ),
+            child: const Text(
+              'Save',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
