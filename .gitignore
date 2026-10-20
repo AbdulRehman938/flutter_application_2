@@ -52,7 +52,6 @@ app.*.map.json
 *.env.local
 *.env.production
 *.env.development
-.env
 secrets.yaml
 api_keys.txt
 private_keys.txt
@@ -70,3 +69,5 @@ config.json
 *.pem
 *.key
 *.p12
+config.bat
+node_modules
